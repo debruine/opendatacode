@@ -1,0 +1,30 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Open Data and Code Assessment",
+    "section": "",
+    "text": "Overview\nAssessing all of the research articles published in Psychological Science in 2022 with open data badges, to document problems with data and code access and running."
+  },
+  {
+    "objectID": "scrape.html#scrape-data",
+    "href": "scrape.html#scrape-data",
+    "title": "\n1  Scraping data\n",
+    "section": "\n1.1 Scrape Data",
+    "text": "1.1 Scrape Data\nGet all DOIs and some info from papers in the 2022 issues.\n\nCodetoc &lt;- paste0(\"https://journals.sagepub.com/toc/pssa/33/\", 1:12)\n\nget_dois &lt;- function(toc_page) {\n  html &lt;- read_html(toc_page)\n  contents &lt;- html_elements(html, \".issue-item__container\")\n  \n  badges &lt;- sapply(contents, function(content) {\n    content |&gt; \n      html_elements(\".issue-item__badges\") |&gt;\n      lapply(function(x) {\n        html_elements(x, \"img\") |&gt;\n        html_attr(\"src\") |&gt;\n        gsub(\"/products/sage/releasedAssets/images/\", \"\", x = _) |&gt;\n        gsub(\"\\\\.svg\", \"\", x = _) |&gt;\n          c(\"paper\")\n      })\n  })\n  \n  dois &lt;- html_elements(contents, \".issue-item__title a\") |&gt;\n    html_attr(\"href\") |&gt;\n    gsub(\"/doi/abs/\", \"\", x = _)\n  \n  access &lt;- html_elements(contents, \".issue-item-access\") |&gt;\n    html_text2()\n  \n  type &lt;- html_elements(contents, \".issue-item-access + span\") |&gt;\n    html_text2()\n  \n  list(\n    doi = dois,\n    badges = badges,\n    access = access,\n    type = type\n  ) |&gt; as_tibble() |&gt;\n    unnest(badges) |&gt;\n    mutate(x = TRUE) |&gt;\n    pivot_wider(values_from = x, \n                values_fill = FALSE,\n                names_from = badges) |&gt;\n    select(-paper)\n}\n\npapers &lt;- map_df(toc, get_dois)\nsaveRDS(papers, \"data/papers.rds\")\n\n\n\nCode# load from saved \npapers &lt;- readRDS(\"data/papers.rds\")\n\n\n\nCodeget_open &lt;- function(doi) {\n  html &lt;- read_html(paste0(\"https://doi.org/\", doi))\n  open &lt;- html |&gt;\n    html_element(\"#open-science\") |&gt; \n    html_element(\"div\")\n  \n  open_text &lt;- html_text2(open)\n  open_links &lt;- open |&gt; html_elements(\"a\") |&gt; \n    html_text() |&gt;\n    setdiff(\"http://www.psychologicalscience.org/publications/badges\") |&gt;\n    paste(collapse = \";\")\n  \n  # extract all OSF links\n  osf &lt;- html_text2(html) |&gt;\n    str_extract_all(\"osf.io/[A-Za-z0-9]*\") |&gt;\n    unlist() |&gt;\n    unique() |&gt;\n    paste(collapse = \";\")\n  \n  data.frame(\n    doi = doi,\n    osf = osf,\n    open_text = open_text,\n    open_links = open_links)\n}\n\n# test on a random DOI\n#papers$doi |&gt; sample(1) |&gt; get_open()\n\nopen &lt;- map_df(papers$doi, get_open)\nsaveRDS(open, \"data/open.rds\")\n\n\n\nCode# load from saved \nopen &lt;- readRDS(\"data/open.rds\")\n\n\n\nCodepaper_data &lt;- inner_join(papers, open, by = \"doi\")"
+  },
+  {
+    "objectID": "scrape.html#fix-problems",
+    "href": "scrape.html#fix-problems",
+    "title": "\n1  Scraping data\n",
+    "section": "\n1.2 Fix problems",
+    "text": "1.2 Fix problems\n\nCodepaper_data |&gt;\n  filter(type == \"Research article\") |&gt;\n  filter(is.na(open_text))\n\n\nTwo papers were further reflections, so open text is not relevant. They were mislabelled as research articles.\n\nCodefr &lt;- c(\"10.1177/09567976221105214\",\n        \"10.1177/09567976211056641\")\npaper_data[paper_data$doi %in% fr, \"type\"] &lt;- \"Further reflection\"\n\n\nThe Open Practices section of 10.1177/09567976221119727 was not labelled correctly.\n\nCodedoi &lt;- \"10.1177/09567976221119727\"\nhtml &lt;- read_html(paste0(\"https://doi.org/\", doi))\nopen &lt;- html |&gt; html_element(\"#sec-1 div\")\nopen_text &lt;- html_text2(open)\nlinks &lt;- open |&gt; html_elements(\"a\") |&gt; html_text()\nopen_links &lt;- links[startsWith(links, \"https\")] |&gt;\n  paste(collapse = \";\")\n\npaper_data[paper_data$doi == doi, \"open_text\"] &lt;- open_text\npaper_data[paper_data$doi == doi, \"open_links\"] &lt;- open_links\n\n\nPapers with no links in the open statement. Check that they really aren’t sharing data.\n\nCodepaper_data |&gt;\n  filter(type == \"Research article\",\n         open_links == \"\") |&gt;\n  select(doi, open_text)\n\n\n10.1177/09567976221119393 has a link without link formatting.\n\nCodepaper_data[paper_data$doi == \"10.1177/09567976221119393\", \"open_links\"] &lt;- \"https://osf.io/qfjk9\"\n\n\n\nCodewrite_csv(paper_data, \"data/paper_data.csv\")"
+  },
+  {
+    "objectID": "scrape.html#descriptives",
+    "href": "scrape.html#descriptives",
+    "title": "\n1  Scraping data\n",
+    "section": "\n1.3 Descriptives",
+    "text": "1.3 Descriptives\n\nCode# load from saved \nres_papers &lt;- read_csv(\"data/paper_data.csv\", \n                       show_col_types = FALSE) |&gt;\n  filter(type == \"Research article\")\n\n\n\nCoderes_papers |&gt;\n  count(`open-data`, `open-materials`, `pre-registred`)\n\n\n\n  \n\n\n\n\nCodevenndat &lt;- list(\n  `all articles` = 1:nrow(res_papers),\n  `open data` = which(res_papers$`open-data`),\n  `open materials` = which (res_papers$`open-materials`),\n  `pre-registration` = which(res_papers$`pre-registred`)\n)\n\nset.seed(8675309)\nvenndat |&gt;\n euler() |&gt;\n plot(quantities = TRUE, \n      #main = \"Badges in 146 Psychological Science Articles (2022)\",\n      legend = TRUE,\n      labels = FALSE,\n      edges = list(col = c(\"black\", \"#aa0000ff\", \"#ffdd00ff\", \"#2075cdff\"), lwd = 4),\n      fills = c(\"white\", \n                \"#cc000033\", \"#ffdd0033\", \"#2075cd33\",\n                \"white\", \"white\", \"white\", \"white\", \"white\", \"white\", \n                \"#ffaa1066\", \"#aa00ff66\", \"#00dd3333\", \n                \"white\", \"grey90\"))\n\n\n\nBadges in 144 Psychological Science Articles (2022)"
+  }
+]

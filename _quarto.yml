@@ -1,0 +1,42 @@
+lang: en
+project:
+  type: book
+  output-dir: docs
+execute:
+  freeze: false
+book:
+  title: Open Data and Code Assessment
+  author: Lisa DeBruine and Scott Runcie
+  license: CC-BY
+  cookie-consent: false
+  page-navigation: true
+  search: true
+  page-footer: CC-BY (2023)
+  chapters:
+  - index.qmd
+  - scrape.qmd
+bibliography: include/references.bib
+csl: include/apa.csl
+format:
+  html:
+    theme:
+      light:
+      - flatly
+      - include/light.scss
+      dark:
+      - darkly
+      - include/dark.scss
+    css:
+    - https://use.fontawesome.com/releases/v5.13.0/css/all.css
+    - include/booktem.css
+    - include/glossary.css
+    - include/style.css
+    df-print: paged
+    code-link: true
+    code-fold: true
+    code-line-numbers: true
+    code-overflow: wrap
+    code-copy: hover
+    highlight-style: a11y
+    include-after-body:
+    - include/script.js
